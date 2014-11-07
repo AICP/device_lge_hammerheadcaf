@@ -143,7 +143,8 @@ PRODUCT_PACKAGES += \
     libextmedia_jni
 
 PRODUCT_BOOT_JARS += \
-    qcmediaplayer
+    qcmediaplayer \
+    tcmiface
 
 # Audio
 PRODUCT_PACKAGES += \
