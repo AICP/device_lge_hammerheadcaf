@@ -94,15 +94,7 @@ PRODUCT_COPY_FILES += \
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/thermal-engine-8974.conf:system/etc/thermal-engine-8974.conf
 
-# For SPN display
-PRODUCT_COPY_FILES += \
-    $(LOCAL_PATH)/spn-conf.xml:system/etc/spn-conf.xml
-
-# This device is xhdpi.  However the platform doesn't
-# currently contain all of the bitmaps at xhdpi density so
-# we do this little trick to fall back to the hdpi version
-# if the xhdpi doesn't exist.
-PRODUCT_AAPT_CONFIG := normal hdpi xhdpi xxhdpi
+PRODUCT_AAPT_CONFIG := normal
 PRODUCT_AAPT_PREF_CONFIG := xxhdpi
 
 PRODUCT_CHARACTERISTICS := nosdcard
@@ -232,10 +224,6 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
     com.android.future.usb.accessory
 
-# Filesystem management tools
-PRODUCT_PACKAGES += \
-    e2fsck
-
 # for off charging mode
 PRODUCT_PACKAGES += \
     charger_res_images
@@ -248,7 +236,7 @@ PRODUCT_PACKAGES += \
 
 # QCOM Perf lib
 PRODUCT_PROPERTY_OVERRIDES += \
-    ro.vendor.extension_library=/vendor/lib/libqc-opt.so
+    ro.vendor.extension_library=/vendor/lib/libqti-perfd-client.so
 
 PRODUCT_PROPERTY_OVERRIDES += \
     ro.opengles.version=196608
@@ -294,7 +282,16 @@ PRODUCT_PROPERTY_OVERRIDES += \
     ro.qti.sensors.smgr_mag_cal_en=true \
     ro.qti.sensors.step_detector=true \
     ro.qti.sensors.step_counter=true \
-    ro.qti.sensors.pick_up = false
+    ro.qti.sensors.pick_up=false \
+    ro.qti.sensors.tap=false \
+    ro.qti.sensors.facing=false \
+    ro.qti.sensors.tilt=false \
+    ro.qti.sensors.amd=false \
+    ro.qti.sensors.rmd=false \
+    ro.qti.sensors.vmd=false \
+    ro.qti.sensors.pedometer=false \
+    ro.qti.sensors.pam=false \
+    ro.qti.sdk.sensors.gestures=false
 
 # Doze mode
 PRODUCT_PACKAGES += \

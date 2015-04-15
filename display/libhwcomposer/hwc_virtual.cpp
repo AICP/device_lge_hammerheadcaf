@@ -61,9 +61,7 @@ HWCVirtualVDS::HWCVirtualVDS() {
 
 void HWCVirtualVDS::init(hwc_context_t *ctx) {
     const int dpy = HWC_DISPLAY_VIRTUAL;
-    ctx->mFBUpdate[dpy] =
-            IFBUpdate::getObject(ctx, dpy);
-    ctx->mMDPComp[dpy] =  MDPComp::getObject(ctx, dpy);
+    initCompositionResources(ctx, dpy);
 
     if(ctx->mFBUpdate[dpy])
         ctx->mFBUpdate[dpy]->reset();
@@ -82,19 +80,14 @@ void HWCVirtualVDS::destroy(hwc_context_t *ctx, size_t numDisplays,
         ctx->dpyAttr[dpy].connected = false;
         ctx->dpyAttr[dpy].isPause = false;
 
-        if(ctx->mFBUpdate[dpy]) {
-            delete ctx->mFBUpdate[dpy];
-            ctx->mFBUpdate[dpy] = NULL;
-        }
-        if(ctx->mMDPComp[dpy]) {
-            delete ctx->mMDPComp[dpy];
-            ctx->mMDPComp[dpy] = NULL;
-        }
+        destroyCompositionResources(ctx, dpy);
+
         // We reset the WB session to non-secure when the virtual display
         // has been disconnected.
         if(!Writeback::getInstance()->setSecure(false)) {
             ALOGE("Failure while attempting to reset WB session.");
         }
+
         ctx->mWfdSyncLock.lock();
         ctx->mWfdSyncLock.signal();
         ctx->mWfdSyncLock.unlock();
@@ -146,6 +139,7 @@ int HWCVirtualVDS::prepare(hwc_composer_device_1 *dev,
              * Mark all application layers as OVERLAY so that
              * GPU will not compose.
              */
+            Writeback::getInstance(); //Ensure that WB is active during pause
             for(size_t i = 0 ;i < (size_t)(list->numHwLayers - 1); i++) {
                 hwc_layer_1_t *layer = &list->hwLayers[i];
                 layer->compositionType = HWC_OVERLAY;
@@ -246,6 +240,17 @@ void HWCVirtualVDS::pause(hwc_context_t* ctx, int dpy) {
     }
     usleep(ctx->dpyAttr[HWC_DISPLAY_PRIMARY].vsync_period
             * 2 / 1000);
+    // At this point all the pipes used by External have been
+    // marked as UNSET.
+    {
+        Locker::Autolock _l(ctx->mDrawLock);
+        // Perform commit to unstage the pipes.
+        if (!Overlay::displayCommit(ctx->dpyAttr[dpy].fd)) {
+            ALOGE("%s: display commit fail! for %d dpy",
+                    __FUNCTION__, dpy);
+        }
+        ctx->proc->invalidate(ctx->proc);
+    }
     return;
 }
 
@@ -329,18 +334,12 @@ int HWCVirtualV4L2::set(hwc_context_t *ctx, hwc_display_contents_1_t *list) {
             ret = -1;
         }
 
-        int extOnlyLayerIndex =
-            ctx->listStats[dpy].extOnlyLayerIndex;
-
         private_handle_t *hnd = (private_handle_t *)fbLayer->handle;
-        if(extOnlyLayerIndex!= -1) {
-            hwc_layer_1_t *extLayer = &list->hwLayers[extOnlyLayerIndex];
-            hnd = (private_handle_t *)extLayer->handle;
-        } else if(copybitDone) {
+        if(copybitDone) {
             hnd = ctx->mCopyBit[dpy]->getCurrentRenderBuffer();
         }
 
-        if(hnd && !isYuvBuffer(hnd)) {
+        if(hnd) {
             if (!ctx->mFBUpdate[dpy]->draw(ctx, hnd)) {
                 ALOGE("%s: FBUpdate::draw fail!", __FUNCTION__);
                 ret = -1;

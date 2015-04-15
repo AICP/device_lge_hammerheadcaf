@@ -56,7 +56,7 @@ class RotMgr;
 namespace qhwc {
 //fwrd decl
 class QueuedBufferStore;
-class ExternalDisplay;
+class HDMIDisplay;
 class VirtualDisplay;
 class IFBUpdate;
 class IVideoOverlay;
@@ -111,7 +111,6 @@ struct ListStats {
     //Video specific
     int yuvCount;
     int yuvIndices[MAX_NUM_APP_LAYERS];
-    int extOnlyLayerIndex;
     bool preMultipliedAlpha;
     int yuv4k2kIndices[MAX_NUM_APP_LAYERS];
     int yuv4k2kCount;
@@ -121,6 +120,10 @@ struct ListStats {
     ovutils::Dim roi;
     bool secureUI; // Secure display layer
     bool isSecurePresent;
+    hwc_rect_t lRoi;  //left ROI
+    hwc_rect_t rRoi;  //right ROI. Unused in single DSI panels.
+    //App Buffer Composition index
+    int  renderBufIndexforABC;
 };
 
 //PTOR Comp info
@@ -257,6 +260,11 @@ int getBlending(int blending);
 bool isGLESOnlyComp(hwc_context_t *ctx, const int& dpy);
 void reset_layer_prop(hwc_context_t* ctx, int dpy, int numAppLayers);
 void dumpBuffer(private_handle_t *ohnd, char *bufferName);
+bool isAbcInUse(hwc_context_t *ctx);
+void updateDisplayInfo(hwc_context_t* ctx, int dpy);
+void resetDisplayInfo(hwc_context_t* ctx, int dpy);
+void initCompositionResources(hwc_context_t* ctx, int dpy);
+void destroyCompositionResources(hwc_context_t* ctx, int dpy);
 
 //Helper function to dump logs
 void dumpsys_log(android::String8& buf, const char* fmt, ...);
@@ -271,6 +279,7 @@ void optimizeLayerRects(hwc_context_t *ctx,
         const hwc_display_contents_1_t *list, const int& dpy);
 bool areLayersIntersecting(const hwc_layer_1_t* layer1,
         const hwc_layer_1_t* layer2);
+bool operator ==(const hwc_rect_t& lhs, const hwc_rect_t& rhs);
 
 // returns true if Action safe dimensions are set and target supports Actionsafe
 bool isActionSafePresent(hwc_context_t *ctx, int dpy);
@@ -401,16 +410,6 @@ static inline bool isProtectedBuffer(const private_handle_t* hnd) {
     return (hnd && (private_handle_t::PRIV_FLAGS_PROTECTED_BUFFER & hnd->flags));
 }
 
-//Return true if buffer is marked locked
-static inline bool isBufferLocked(const private_handle_t* hnd) {
-    return (hnd && (private_handle_t::PRIV_FLAGS_HWC_LOCK & hnd->flags));
-}
-
-//Return true if buffer is for external display only
-static inline bool isExtOnly(const private_handle_t* hnd) {
-    return (hnd && (hnd->flags & private_handle_t::PRIV_FLAGS_EXTERNAL_ONLY));
-}
-
 //Return true if the buffer is intended for Secure Display
 static inline bool isSecureDisplayBuffer(const private_handle_t* hnd) {
     return (hnd && (hnd->flags & private_handle_t::PRIV_FLAGS_SECURE_DISPLAY));
@@ -505,8 +504,9 @@ struct hwc_context_t {
 
     //Primary and external FB updater
     qhwc::IFBUpdate *mFBUpdate[HWC_NUM_DISPLAY_TYPES];
-    // External display related information
-    qhwc::ExternalDisplay *mExtDisplay;
+    // HDMI display related object. Used to configure/teardown
+    // HDMI when it is connected as primary or external.
+    qhwc::HDMIDisplay *mHDMIDisplay;
     qhwc::VirtualDisplay *mVirtualDisplay;
     qhwc::MDPInfo mMDP;
     qhwc::VsyncState vstate;
@@ -565,6 +565,11 @@ struct hwc_context_t {
     // PTOR Info
     qhwc::PtorInfo mPtorInfo;
     uint32_t mIsPTOREnabled;
+
+   // Stores the hpd enabled status- avoids re-enabling HDP on suspend resume.
+    bool mHPDEnabled;
+    //App Buffer Composition
+    bool enableABC;
 };
 
 namespace qhwc {
@@ -587,7 +592,17 @@ inline bool isSecurePresent(hwc_context_t *ctx, int dpy) {
 
 static inline bool isSecondaryConnected(hwc_context_t* ctx) {
     return (ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].connected ||
-    ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].connected);
+            ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].connected);
+}
+
+static inline bool isSecondaryAnimating(hwc_context_t* ctx) {
+    return (ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].connected &&
+            (!ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].isPause) &&
+            ctx->listStats[HWC_DISPLAY_EXTERNAL].isDisplayAnimating)
+            ||
+           (ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].connected &&
+            (!ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isPause) &&
+            ctx->listStats[HWC_DISPLAY_VIRTUAL].isDisplayAnimating);
 }
 
 static inline bool isSecondaryConfiguring(hwc_context_t* ctx) {

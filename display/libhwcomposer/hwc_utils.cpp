@@ -38,7 +38,7 @@
 #include "hwc_copybit.h"
 #include "hwc_dump_layers.h"
 #include "hwc_vpuclient.h"
-#include "external.h"
+#include "hdmi.h"
 #include "virtual.h"
 #include "hwc_qclient.h"
 #include "QService.h"
@@ -74,6 +74,52 @@ EGLAPI EGLBoolean eglGpuPerfHintQCOM(EGLDisplay dpy, EGLContext ctx,
 #endif
 
 namespace qhwc {
+
+// external display class state
+void updateDisplayInfo(hwc_context_t* ctx, int dpy) {
+    ctx->dpyAttr[dpy].fd = ctx->mHDMIDisplay->getFd();
+    ctx->dpyAttr[dpy].xres = ctx->mHDMIDisplay->getWidth();
+    ctx->dpyAttr[dpy].yres = ctx->mHDMIDisplay->getHeight();
+    ctx->dpyAttr[dpy].mDownScaleMode = ctx->mHDMIDisplay->getMDPScalingMode();
+    ctx->dpyAttr[dpy].vsync_period = ctx->mHDMIDisplay->getVsyncPeriod();
+    ctx->mViewFrame[dpy].left = 0;
+    ctx->mViewFrame[dpy].top = 0;
+    ctx->mViewFrame[dpy].right = ctx->dpyAttr[dpy].xres;
+    ctx->mViewFrame[dpy].bottom = ctx->dpyAttr[dpy].yres;
+    //FIXME: for now assume HDMI as secure
+    //Will need to read the HDCP status from the driver
+    //and update this accordingly
+    if (dpy == HWC_DISPLAY_EXTERNAL) {
+        ctx->dpyAttr[dpy].secure = true;
+    }
+}
+
+// Reset hdmi display attributes and list stats structures
+void resetDisplayInfo(hwc_context_t* ctx, int dpy) {
+    memset(&(ctx->dpyAttr[dpy]), 0, sizeof(ctx->dpyAttr[dpy]));
+    memset(&(ctx->listStats[dpy]), 0, sizeof(ctx->listStats[dpy]));
+    // We reset the fd to -1 here but External display class is responsible
+    // for it when the display is disconnected. This is handled as part of
+    // EXTERNAL_OFFLINE event.
+    ctx->dpyAttr[dpy].fd = -1;
+}
+
+// Initialize composition resources
+void initCompositionResources(hwc_context_t* ctx, int dpy) {
+    ctx->mFBUpdate[dpy] = IFBUpdate::getObject(ctx, dpy);
+    ctx->mMDPComp[dpy] = MDPComp::getObject(ctx, dpy);
+}
+
+void destroyCompositionResources(hwc_context_t* ctx, int dpy) {
+    if(ctx->mFBUpdate[dpy]) {
+        delete ctx->mFBUpdate[dpy];
+        ctx->mFBUpdate[dpy] = NULL;
+    }
+    if(ctx->mMDPComp[dpy]) {
+        delete ctx->mMDPComp[dpy];
+        ctx->mMDPComp[dpy] = NULL;
+    }
+}
 
 static int openFramebufferDevice(hwc_context_t *ctx)
 {
@@ -160,11 +206,8 @@ void initContext(hwc_context_t *ctx)
     ctx->mOverlay = overlay::Overlay::getInstance();
     ctx->mRotMgr = RotMgr::getInstance();
 
-    //Is created and destroyed only once for primary
-    //For external it could get created and destroyed multiple times depending
-    //on what external we connect to.
-    ctx->mFBUpdate[HWC_DISPLAY_PRIMARY] =
-        IFBUpdate::getObject(ctx, HWC_DISPLAY_PRIMARY);
+    // Initialize composition objects for the primary display
+    initCompositionResources(ctx, HWC_DISPLAY_PRIMARY);
 
     // Check if the target supports copybit compostion (dyn/mdp) to
     // decide if we need to open the copybit module.
@@ -180,9 +223,14 @@ void initContext(hwc_context_t *ctx)
                                                          HWC_DISPLAY_PRIMARY);
     }
 
-    ctx->mExtDisplay = new ExternalDisplay(ctx);
+    ctx->mHDMIDisplay = new HDMIDisplay();
     ctx->mVirtualDisplay = new VirtualDisplay(ctx);
     ctx->mVirtualonExtActive = false;
+    // Send the primary resolution to the external display class
+    // to be used for MDP scaling functionality
+    uint32_t priW = ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres;
+    uint32_t priH = ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres;
+    ctx->mHDMIDisplay->setPrimaryAttributes(priW, priH);
     ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].isActive = false;
     ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].connected = false;
     ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isActive = false;
@@ -191,8 +239,6 @@ void initContext(hwc_context_t *ctx)
     ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].mDownScaleMode = false;
     ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].mDownScaleMode = false;
 
-    ctx->mMDPComp[HWC_DISPLAY_PRIMARY] =
-         MDPComp::getObject(ctx, HWC_DISPLAY_PRIMARY);
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].connected = true;
 
     ctx->mVDSEnabled = false;
@@ -248,6 +294,10 @@ void initContext(hwc_context_t *ctx)
     ctx->mVPUClient = new VPUClient();
 #endif
 
+    ctx->enableABC = false;
+    property_get("debug.sf.hwc.canUseABC", value, "0");
+    ctx->enableABC  = atoi(value) ? true : false;
+
     // Initialize gpu perfomance hint related parameters
     property_get("sys.hwc.gpu_perf_mode", value, "0");
     ctx->mGPUHintInfo.mGpuPerfModeEnable = atoi(value)? true : false;
@@ -257,6 +307,7 @@ void initContext(hwc_context_t *ctx)
     ctx->mGPUHintInfo.mPrevCompositionGLES = false;
     ctx->mGPUHintInfo.mCurrGPUPerfMode = EGL_GPU_LEVEL_0;
     memset(&(ctx->mPtorInfo), 0, sizeof(ctx->mPtorInfo));
+    ctx->mHPDEnabled = false;
     ALOGI("Initializing Qualcomm Hardware Composer");
     ALOGI("MDP version: %d", ctx->mMDP.version);
 }
@@ -285,9 +336,9 @@ void closeContext(hwc_context_t *ctx)
         ctx->dpyAttr[HWC_DISPLAY_PRIMARY].fd = -1;
     }
 
-    if(ctx->mExtDisplay) {
-        delete ctx->mExtDisplay;
-        ctx->mExtDisplay = NULL;
+    if(ctx->mHDMIDisplay) {
+        delete ctx->mHDMIDisplay;
+        ctx->mHDMIDisplay = NULL;
     }
 
 #ifdef VPU_TARGET
@@ -297,14 +348,8 @@ void closeContext(hwc_context_t *ctx)
 #endif
 
     for(int i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
-        if(ctx->mFBUpdate[i]) {
-            delete ctx->mFBUpdate[i];
-            ctx->mFBUpdate[i] = NULL;
-        }
-        if(ctx->mMDPComp[i]) {
-            delete ctx->mMDPComp[i];
-            ctx->mMDPComp[i] = NULL;
-        }
+        destroyCompositionResources(ctx, i);
+
         if(ctx->mHwcDebug[i]) {
             delete ctx->mHwcDebug[i];
             ctx->mHwcDebug[i] = NULL;
@@ -360,12 +405,12 @@ void getActionSafePosition(hwc_context_t *ctx, int dpy, hwc_rect_t& rect) {
     float xRatio = 1.0;
     float yRatio = 1.0;
 
-    int fbWidth = ctx->dpyAttr[dpy].xres;
-    int fbHeight = ctx->dpyAttr[dpy].yres;
+    uint32_t fbWidth = ctx->dpyAttr[dpy].xres;
+    uint32_t fbHeight = ctx->dpyAttr[dpy].yres;
     if(ctx->dpyAttr[dpy].mDownScaleMode) {
-        // if downscale Mode is enabled for external, need to query
+        // if MDP scaling mode is enabled for external, need to query
         // the actual width and height, as that is the physical w & h
-         ctx->mExtDisplay->getAttributes(fbWidth, fbHeight);
+         ctx->mHDMIDisplay->getAttributes(fbWidth, fbHeight);
     }
 
 
@@ -442,8 +487,8 @@ void getAspectRatioPosition(hwc_context_t* ctx, int dpy, int extOrientation,
     if(extOrientation & HAL_TRANSFORM_ROT_90) {
         // Swap width/height for input position
         swapWidthHeight(actualWidth, actualHeight);
-        getAspectRatioPosition(fbWidth, fbHeight, (int)actualWidth,
-                               (int)actualHeight, rect);
+        qdutils::getAspectRatioPosition((int)fbWidth, (int)fbHeight,
+                                (int)actualWidth, (int)actualHeight, rect);
         xPos = rect.left;
         yPos = rect.top;
         width = rect.right - rect.left;
@@ -475,7 +520,8 @@ void getAspectRatioPosition(hwc_context_t* ctx, int dpy, int extOrientation,
         xRatio = (outPos.x - xPos)/width;
         // GetaspectRatio -- tricky to get the correct aspect ratio
         // But we need to do this.
-        getAspectRatioPosition(width, height, width, height, r);
+        qdutils::getAspectRatioPosition((int)width, (int)height,
+                               (int)width,(int)height, r);
         xPos = r.left;
         yPos = r.top;
         float tempWidth = r.right - r.left;
@@ -496,9 +542,9 @@ void getAspectRatioPosition(hwc_context_t* ctx, int dpy, int extOrientation,
                  outPos.w, outPos.h);
     }
     if(ctx->dpyAttr[dpy].mDownScaleMode) {
-        int extW, extH;
+        uint32_t extW = 0, extH = 0;
         if(dpy == HWC_DISPLAY_EXTERNAL)
-            ctx->mExtDisplay->getAttributes(extW, extH);
+            ctx->mHDMIDisplay->getAttributes(extW, extH);
         else
             ctx->mVirtualDisplay->getAttributes(extW, extH);
         fbWidth  = ctx->dpyAttr[dpy].xres;
@@ -558,7 +604,7 @@ void calcExtDisplayPosition(hwc_context_t *ctx,
                 if(!isPrimaryPortrait(ctx)) {
                     swap(srcWidth, srcHeight);
                 }                    // Get Aspect Ratio for external
-                getAspectRatioPosition(dstWidth, dstHeight, srcWidth,
+                qdutils::getAspectRatioPosition(dstWidth, dstHeight, srcWidth,
                                     srcHeight, displayFrame);
                 // Crop - this is needed, because for sidesync, the dest fb will
                 // be in portrait orientation, so update the crop to not show the
@@ -572,14 +618,14 @@ void calcExtDisplayPosition(hwc_context_t *ctx,
                 }
             }
             if(ctx->dpyAttr[dpy].mDownScaleMode) {
-                int extW, extH;
-                // if downscale is enabled, map the co-ordinates to new
+                uint32_t extW = 0, extH = 0;
+                // if MDP scaling mode is enabled, map the co-ordinates to new
                 // domain(downscaled)
                 float fbWidth  = ctx->dpyAttr[dpy].xres;
                 float fbHeight = ctx->dpyAttr[dpy].yres;
                 // query MDP configured attributes
                 if(dpy == HWC_DISPLAY_EXTERNAL)
-                    ctx->mExtDisplay->getAttributes(extW, extH);
+                    ctx->mHDMIDisplay->getAttributes(extW, extH);
                 else
                     ctx->mVirtualDisplay->getAttributes(extW, extH);
                 //Calculate the ratio...
@@ -790,13 +836,13 @@ void setListStats(hwc_context_t *ctx,
     ctx->listStats[dpy].isSecurePresent = false;
     ctx->listStats[dpy].yuvCount = 0;
     char property[PROPERTY_VALUE_MAX];
-    ctx->listStats[dpy].extOnlyLayerIndex = -1;
     ctx->listStats[dpy].isDisplayAnimating = false;
     ctx->listStats[dpy].roi = ovutils::Dim(0, 0,
                       (int)ctx->dpyAttr[dpy].xres, (int)ctx->dpyAttr[dpy].yres);
     ctx->listStats[dpy].secureUI = false;
     ctx->listStats[dpy].yuv4k2kCount = 0;
     ctx->dpyAttr[dpy].mActionSafePresent = isActionSafePresent(ctx, dpy);
+    ctx->listStats[dpy].renderBufIndexforABC = -1;
 
     trimList(ctx, list, dpy);
     optimizeLayerRects(ctx, list, dpy);
@@ -843,10 +889,6 @@ void setListStats(hwc_context_t *ctx,
         if(layer->blending == HWC_BLENDING_PREMULT)
             ctx->listStats[dpy].preMultipliedAlpha = true;
 
-
-        if(UNLIKELY(isExtOnly(hnd))){
-            ctx->listStats[dpy].extOnlyLayerIndex = i;
-        }
     }
     if(ctx->listStats[dpy].yuvCount > 0) {
         if (property_get("hw.cabl.yuv", property, NULL) > 0) {
@@ -933,7 +975,7 @@ bool isActionSafePresent(hwc_context_t *ctx, int dpy) {
     // Disable Actionsafe for non HDMI displays.
     if(!(dpy == HWC_DISPLAY_EXTERNAL) ||
         qdutils::MDPVersion::getInstance().is8x74v2() ||
-        ctx->mExtDisplay->isCEUnderscanSupported()) {
+        ctx->mHDMIDisplay->isCEUnderscanSupported()) {
         return false;
     }
 
@@ -1043,6 +1085,13 @@ hwc_rect_t moveRect(const hwc_rect_t& rect, const int& x_off, const int& y_off)
     res.bottom = rect.bottom + y_off;
 
     return res;
+}
+
+bool operator ==(const hwc_rect_t& lhs, const hwc_rect_t& rhs) {
+    if(lhs.left == rhs.left && lhs.top == rhs.top &&
+       lhs.right == rhs.right &&  lhs.bottom == rhs.bottom )
+          return true ;
+    return false;
 }
 
 /* computes the intersection of two rects */
@@ -1266,11 +1315,20 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
     }
 
     for(uint32_t i = 0; i < list->numHwLayers; i++) {
-        if(list->hwLayers[i].compositionType == HWC_OVERLAY &&
+        if(((isAbcInUse(ctx)== true ) ||
+          (list->hwLayers[i].compositionType == HWC_OVERLAY)) &&
                         list->hwLayers[i].acquireFenceFd >= 0) {
             if(UNLIKELY(swapzero))
                 acquireFd[count++] = -1;
-            else
+            // if ABC is enabled for more than one layer.
+            // renderBufIndexforABC will work as FB.Hence
+            // set the acquireFD from fd - which is coming from copybit
+            else if(fd >= 0 && (isAbcInUse(ctx) == true)) {
+                if(ctx->listStats[dpy].renderBufIndexforABC ==(int32_t)i)
+                   acquireFd[count++] = fd;
+                else
+                   continue;
+            } else
                 acquireFd[count++] = list->hwLayers[i].acquireFenceFd;
         }
         if(list->hwLayers[i].compositionType == HWC_FRAMEBUFFER_TARGET) {
@@ -1323,12 +1381,22 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
                 // if animation is in progress.
                 list->hwLayers[i].releaseFenceFd = -1;
             } else if(list->hwLayers[i].releaseFenceFd < 0) {
-                //If rotator has not already populated this field.
-                if(list->hwLayers[i].compositionType == HWC_BLIT) {
-                    //For Blit, the app layers should be released when the Blit is
-                    //complete. This fd was passed from copybit->draw
+#ifdef QCOM_BSP
+                //If rotator has not already populated this field
+                // & if it's a not VPU layer
+
+                // if ABC is enabled for more than one layer
+                if(fd >= 0 && (isAbcInUse(ctx) == true) &&
+                  ctx->listStats[dpy].renderBufIndexforABC !=(int32_t)i){
                     list->hwLayers[i].releaseFenceFd = dup(fd);
-                } else {
+                } else if((list->hwLayers[i].compositionType == HWC_BLIT)&&
+                                               (isAbcInUse(ctx) == false)){
+                    //For Blit, the app layers should be released when the Blit
+                    //is complete. This fd was passed from copybit->draw
+                    list->hwLayers[i].releaseFenceFd = dup(fd);
+                } else 
+#endif
+                {
                     list->hwLayers[i].releaseFenceFd = dup(releaseFd);
                 }
             }
@@ -1398,7 +1466,7 @@ void setMdpFlags(hwc_layer_1_t *layer,
                 ovutils::OV_MDP_SMP_FORCE_ALLOC);
     }
 
-    if(isProtectedBuffer(hnd)) {
+    if(isSecureBuffer(hnd) || isProtectedBuffer(hnd)) {
         ovutils::setMdpFlags(mdpFlags,
                 ovutils::OV_MDP_SMP_FORCE_ALLOC);
     }
@@ -1830,8 +1898,6 @@ int configureSourceSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
         (*rot) = ctx->mRotMgr->getNext();
         if((*rot) == NULL) return -1;
         ctx->mLayerRotMap[dpy]->add(layer, *rot);
-        if(!dpy)
-            BwcPM::setBwc(ctx, crop, dst, transform, mdpFlagsL);
         //Configure rotator for pre-rotation
         if(configRotator(*rot, whf, crop, mdpFlagsL, orient, downscale) < 0) {
             ALOGE("%s: configRotator failed!", __FUNCTION__);
@@ -1970,6 +2036,10 @@ void dumpBuffer(private_handle_t *ohnd, char *bufferName) {
         ALOGD("Buffer[%s] Dump to %s: %s",
         bufferName, dumpFilename, bResult ? "Success" : "Fail");
     }
+}
+
+bool isAbcInUse(hwc_context_t *ctx){
+  return (ctx->enableABC && ctx->listStats[0].renderBufIndexforABC == 0);
 }
 
 bool isGLESComp(hwc_context_t *ctx,

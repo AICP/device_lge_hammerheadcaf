@@ -30,7 +30,7 @@
 #include "hwc_mdpcomp.h"
 #include "hwc_copybit.h"
 #include "comptype.h"
-#include "external.h"
+#include "hdmi.h"
 #include "virtual.h"
 #include "hwc_virtual.h"
 #include "mdp_version.h"
@@ -38,24 +38,6 @@ using namespace overlay;
 namespace qhwc {
 #define HWC_UEVENT_SWITCH_STR  "change@/devices/virtual/switch/"
 #define HWC_UEVENT_THREAD_NAME "hwcUeventThread"
-
-static void setup(hwc_context_t* ctx, int dpy)
-{
-    ctx->mFBUpdate[dpy] = IFBUpdate::getObject(ctx, dpy);
-    ctx->mMDPComp[dpy] =  MDPComp::getObject(ctx, dpy);
-}
-
-static void clear(hwc_context_t* ctx, int dpy)
-{
-    if(ctx->mFBUpdate[dpy]) {
-        delete ctx->mFBUpdate[dpy];
-        ctx->mFBUpdate[dpy] = NULL;
-    }
-    if(ctx->mMDPComp[dpy]) {
-        delete ctx->mMDPComp[dpy];
-        ctx->mMDPComp[dpy] = NULL;
-    }
-}
 
 /* Parse uevent data for devices which we are interested */
 static int getConnectedDisplay(const char* strUdata)
@@ -142,18 +124,15 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                 break;
             }
 
-            Locker::Autolock _l(ctx->mDrawLock);
-            clear(ctx, dpy);
-            ctx->dpyAttr[dpy].connected = false;
-            ctx->dpyAttr[dpy].isActive = false;
-            /* If disconnect comes before any composition cycle */
-            ctx->dpyAttr[dpy].isConfiguring = false;
-
+            ctx->mDrawLock.lock();
+            destroyCompositionResources(ctx, dpy);
             if(dpy == HWC_DISPLAY_EXTERNAL) {
-                ctx->mExtDisplay->teardown();
+                ctx->mHDMIDisplay->teardown();
             } else {
                 ctx->mVirtualDisplay->teardown();
             }
+            resetDisplayInfo(ctx, dpy);
+            ctx->mDrawLock.unlock();
 
             /* We need to send hotplug to SF only when we are disconnecting
              * (1) HDMI OR (2) proprietary WFD session */
@@ -175,19 +154,19 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                          "for display: %d", __FUNCTION__, dpy);
                 break;
             }
-            {
-                //Force composition to give up resources like pipes and
-                //close fb. For example if assertive display is going on,
-                //fb2 could be open, thus connecting Layer Mixer#0 to
-                //WriteBack module. If HDMI attempts to open fb1, the driver
-                //will try to attach Layer Mixer#0 to HDMI INT, which will
-                //fail, since Layer Mixer#0 is still connected to WriteBack.
-                //This block will force composition to close fb2 in above
-                //example.
-                Locker::Autolock _l(ctx->mDrawLock);
-                ctx->dpyAttr[dpy].isConfiguring = true;
-                ctx->proc->invalidate(ctx->proc);
-            }
+            ctx->mDrawLock.lock();
+            //Force composition to give up resources like pipes and
+            //close fb. For example if assertive display is going on,
+            //fb2 could be open, thus connecting Layer Mixer#0 to
+            //WriteBack module. If HDMI attempts to open fb1, the driver
+            //will try to attach Layer Mixer#0 to HDMI INT, which will
+            //fail, since Layer Mixer#0 is still connected to WriteBack.
+            //This block will force composition to close fb2 in above
+            //example.
+            ctx->dpyAttr[dpy].isConfiguring = true;
+            ctx->mDrawLock.unlock();
+
+            ctx->proc->invalidate(ctx->proc);
             //2 cycles for slower content
             usleep(ctx->dpyAttr[HWC_DISPLAY_PRIMARY].vsync_period
                    * 2 / 1000);
@@ -198,7 +177,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                              "when WFD is active");
                     {
                         Locker::Autolock _l(ctx->mDrawLock);
-                        clear(ctx, HWC_DISPLAY_VIRTUAL);
+                        destroyCompositionResources(ctx, HWC_DISPLAY_VIRTUAL);
                         ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].connected = false;
                         ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isActive = false;
                     }
@@ -227,7 +206,11 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                              "%s: Teardown signalled",__FUNCTION__);
                     ctx->mWfdSyncLock.unlock();
                 }
-                ctx->mExtDisplay->configure();
+                ctx->mHDMIDisplay->configure();
+                ctx->mHDMIDisplay->activateDisplay();
+                ctx->mDrawLock.lock();
+                updateDisplayInfo(ctx, dpy);
+                ctx->mDrawLock.unlock();
             } else {
                 {
                     Locker::Autolock _l(ctx->mDrawLock);
@@ -245,11 +228,12 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                 ctx->mVirtualDisplay->configure();
             }
 
-            Locker::Autolock _l(ctx->mDrawLock);
-            setup(ctx, dpy);
+            ctx->mDrawLock.lock();
+            initCompositionResources(ctx, dpy);
             ctx->dpyAttr[dpy].isPause = false;
             ctx->dpyAttr[dpy].connected = true;
             ctx->dpyAttr[dpy].isConfiguring = true;
+            ctx->mDrawLock.unlock();
 
             if(dpy == HWC_DISPLAY_EXTERNAL ||
                ctx->mVirtualonExtActive) {
