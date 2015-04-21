@@ -77,13 +77,6 @@ def IncrementalOTA_VerifyEnd(info):
         len(target_radio_img), common.sha1(target_radio_img).hexdigest()))
 
 
-def IncrementalOTA_InstallBegin(info):
-  # Reduce the space taken by the journal.
-  info.script.Unmount("/system")
-  info.script.TunePartition("/system", "-O", "^has_journal")
-  info.script.Mount("/system")
-
-
 def IncrementalOTA_InstallEnd(info):
   try:
     target_bootloader_img = info.target_zip.read("RADIO/bootloader.img")
@@ -113,8 +106,8 @@ def IncrementalOTA_InstallEnd(info):
     if not sf or common.OPTIONS.full_radio:
       # failed to read SOURCE radio image or one has specified the option to
       # include the whole target radio image.
-      print("no radio image in source target_files or full_radio specified; "
-            "installing complete image")
+      print "no radio image in source target_files or full_radio specified; "
+            "installing complete image"
       WriteRadio(info, tf.data)
     else:
       sf = common.File("radio.img", sf)
