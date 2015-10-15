@@ -73,6 +73,7 @@ TARGET_BOARD_PLATFORM := msm8974
 TARGET_BOOTLOADER_BOARD_NAME := hammerhead
 TARGET_BOARD_INFO_FILE := device/lge/hammerheadcaf/board-info.txt
 BOARD_VENDOR_QCOM_GPS_LOC_API_HARDWARE := $(TARGET_BOARD_PLATFORM)
+BOARD_VENDOR_QCOM_LOC_PDK_FEATURE_SET := true
 TARGET_NO_RPC := true
 
 USE_OPENGL_RENDERER := true
@@ -119,43 +120,12 @@ include device/qcom/sepolicy/sepolicy.mk
 BOARD_SEPOLICY_DIRS += \
     device/lge/hammerheadcaf/sepolicy
 
-BOARD_SEPOLICY_UNION += \
-    app.te \
-    bluetooth.te \
-    bluetooth_loader.te \
-    bridge.te \
-    file.te \
-    healthd.te \
-    hostapd.te \
-    mediaserver.te \
-    mm-qcamerad.te \
-    mpdecision.te \
-    netmgrd.te \
-    platform_app.te \
-    qmuxd.te \
-    qseecomd.te \
-    radio.te \
-    rild.te \
-    rmt_storage.te \
-    sensors.te \
-    subsystem_ramdump.te \
-    system_app.te \
-    system_server.te \
-    thermal-engine.te \
-    ueventd.te \
-    untrusted_app.te \
-    vold.te \
-    vss.te \
-    wpa.te \
-    file_contexts \
-    genfs_contexts
-
 HAVE_ADRENO_SOURCE:= false
 
 OVERRIDE_RS_DRIVER:= libRSDriver_adreno.so
 TARGET_FORCE_HWC_FOR_VIRTUAL_DISPLAYS := true
 
-# Local QCOM PowerHAL
+# PowerHAL
 TARGET_POWERHAL_VARIANT := hammerhead
 
 USE_DEVICE_SPECIFIC_QCOM_PROPRIETARY:= true

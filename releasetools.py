@@ -1,5 +1,41 @@
+# Copyright (C) 2014 The CyanogenMod Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import common
 import struct
+import re
+import os
+
+TARGET_DIR = os.getenv('OUT')
+
+def FullOTA_Assertions(info):
+  AddBootloaderAssertion(info, info.input_zip)
+
+
+def IncrementalOTA_Assertions(info):
+  AddBootloaderAssertion(info, info.target_zip)
+
+
+def AddBootloaderAssertion(info, input_zip):
+  android_info = input_zip.read("OTA/android-info.txt")
+  m = re.search(r"require\s+version-bootloader\s*=\s*(\S+)", android_info)
+  if m:
+    bootloaders = m.group(1).split("|")
+    if "*" not in bootloaders:
+      info.script.AssertSomeBootloader(*bootloaders)
+    info.metadata["pre-bootloader"] = m.group(1)
+
 
 def FindRadio(zipfile):
   try:
@@ -25,6 +61,11 @@ def FullOTA_InstallEnd(info):
 
 def IncrementalOTA_VerifyEnd(info):
   target_radio_img = FindRadio(info.target_zip)
+  if common.OPTIONS.full_radio:
+    if not target_radio_img:
+      assert False, "full radio option specified but no radio img found"
+    else:
+      return
   source_radio_img = FindRadio(info.source_zip)
   if not target_radio_img or not source_radio_img: return
   if source_radio_img != target_radio_img:
@@ -34,6 +75,13 @@ def IncrementalOTA_VerifyEnd(info):
         radio_type, radio_device,
         len(source_radio_img), common.sha1(source_radio_img).hexdigest(),
         len(target_radio_img), common.sha1(target_radio_img).hexdigest()))
+
+
+def IncrementalOTA_InstallBegin(info):
+  # Reduce the space taken by the journal.
+  info.script.Unmount("/system")
+  info.script.TunePartition("/system", "-O", "^has_journal")
+  info.script.Mount("/system")
 
 
 def IncrementalOTA_InstallEnd(info):
@@ -55,13 +103,18 @@ def IncrementalOTA_InstallEnd(info):
   if not tf:
     # failed to read TARGET radio image: don't include any radio in update.
     print "no radio.img in target target_files; skipping install"
+    # we have checked the existence of the radio image in
+    # IncrementalOTA_VerifyEnd(), so it won't reach here.
+    assert common.OPTIONS.full_radio == False
   else:
     tf = common.File("radio.img", tf)
 
     sf = FindRadio(info.source_zip)
-    if not sf:
-      # failed to read SOURCE radio image: include the whole target
-      # radio image.
+    if not sf or common.OPTIONS.full_radio:
+      # failed to read SOURCE radio image or one has specified the option to
+      # include the whole target radio image.
+      print("no radio image in source target_files or full_radio specified; "
+            "installing complete image")
       WriteRadio(info, tf.data)
     else:
       sf = common.File("radio.img", sf)

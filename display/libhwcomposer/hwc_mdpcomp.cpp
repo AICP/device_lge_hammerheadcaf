@@ -616,14 +616,6 @@ bool MDPComp::tryFullFrame(hwc_context_t *ctx,
         return false;
     }
 
-    if(!mDpy && isSecondaryAnimating(ctx) &&
-       (isYuvPresent(ctx,HWC_DISPLAY_EXTERNAL) ||
-       isYuvPresent(ctx,HWC_DISPLAY_VIRTUAL)) ) {
-        ALOGD_IF(isDebug(),"%s: Display animation in progress",
-                 __FUNCTION__);
-        return false;
-    }
-
     // check for action safe flag and downscale mode which requires scaling.
     if(ctx->dpyAttr[mDpy].mActionSafePresent
             || ctx->dpyAttr[mDpy].mDownScaleMode) {

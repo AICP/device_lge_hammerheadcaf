@@ -79,6 +79,7 @@ on property:init.svc.bootanim=stopped
     write /sys/devices/system/cpu/cpufreq/ondemand/optimal_freq 960000
     write /sys/devices/system/cpu/cpufreq/ondemand/sync_freq 960000
     write /sys/devices/system/cpu/cpufreq/ondemand/up_threshold_any_cpu_load 85
+    restorecon_recursive /sys/devices/system/cpu/cpufreq/ondemand
 
     # interactive
     write /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor interactive
@@ -94,6 +95,7 @@ on property:init.svc.bootanim=stopped
     write /sys/devices/system/cpu/cpufreq/interactive/timer_rate 30000
     write /sys/devices/system/cpu/cpufreq/interactive/max_freq_hysteresis 100000
     write /sys/devices/system/cpu/cpufreq/interactive/timer_slack 30000
+    restorecon_recursive /sys/devices/system/cpu/cpufreq/interactive
 
     # sched
     write /dev/cpuctl/cpu.notify_on_migrate 1
