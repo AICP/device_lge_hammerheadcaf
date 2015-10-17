@@ -124,10 +124,10 @@ PRODUCT_PACKAGES += \
     memtrack.msm8974 \
     liboverlay
 
-# Media
 PRODUCT_PACKAGES += \
     libc2dcolorconvert \
     libdivxdrmdecrypt \
+    libdashplayer \
     libOmxAacEnc \
     libOmxAmrEnc \
     libOmxCore \
@@ -141,13 +141,8 @@ PRODUCT_PACKAGES += \
     qcmediaplayer \
     libextmedia_jni
 
-# tcmiface for tcm support
-PRODUCT_PACKAGES += \
-    tcmiface
-
 PRODUCT_BOOT_JARS += \
-    qcmediaplayer \
-    tcmiface
+    qcmediaplayer
 
 # Audio
 PRODUCT_PACKAGES += \
@@ -241,6 +236,13 @@ PRODUCT_PACKAGES += \
 
 PRODUCT_PACKAGES += \
     libtinyxml
+
+# TCM (TCP Connection Management)
+PRODUCT_PACKAGES += \
+    tcmiface
+
+PRODUCT_BOOT_JARS += \
+    tcmiface
 
 # I/O Scheduler
 PRODUCT_PROPERTY_OVERRIDES += \
