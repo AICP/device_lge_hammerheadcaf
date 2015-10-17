@@ -141,6 +141,10 @@ PRODUCT_PACKAGES += \
     qcmediaplayer \
     libextmedia_jni
 
+# tcmiface for tcm support
+PRODUCT_PACKAGES += \
+    tcmiface
+
 PRODUCT_BOOT_JARS += \
     qcmediaplayer \
     tcmiface
