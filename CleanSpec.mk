@@ -69,5 +69,3 @@ $(call add-clean-step, rm -f $(OUT_DIR)/target/product/hammerheadcaf/system/buil
 $(call add-clean-step, rm -f $(OUT_DIR)/target/product/hammerheadcaf/system/build.prop)
 $(call add-clean-step, rm -f $(OUT_DIR)/target/product/hammerheadcaf/system/build.prop)
 $(call add-clean-step, rm -rf $(OUT_DIR)/target/product/hammerheadcaf/system/build.prop)
-$(call add-clean-step, rm -f $(OUT_DIR)/target/product/hammerheadcaf/system/build.prop)
-$(call add-clean-step, find $(OUT_DIR)/target/product/hammerheadcaf/ -name \*build.prop* -exec rm -rf {} \;)

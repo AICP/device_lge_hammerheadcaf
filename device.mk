@@ -48,7 +48,6 @@ PRODUCT_COPY_FILES += \
     frameworks/av/media/libstagefright/data/media_codecs_google_telephony.xml:system/etc/media_codecs_google_telephony.xml \
     frameworks/av/media/libstagefright/data/media_codecs_google_video.xml:system/etc/media_codecs_google_video.xml \
     $(LOCAL_PATH)/media_codecs.xml:system/etc/media_codecs.xml \
-    $(LOCAL_PATH)/media_codecs_performance.xml:system/etc/media_codecs_performance.xml \
     $(LOCAL_PATH)/media_profiles.xml:system/etc/media_profiles.xml
 
 PRODUCT_COPY_FILES += \
@@ -345,9 +344,6 @@ PRODUCT_DEFAULT_PROPERTY_OVERRIDES += \
 #PRODUCT_PROPERTY_OVERRIDES += \
     persist.radio.data_no_toggle=1
 
-PRODUCT_PROPERTY_OVERRIDES += \
-    ro.config.vc_call_vol_steps=6
-
 # Setup custom emergency number list based on the MCC. This is needed by RIL
 PRODUCT_PROPERTY_OVERRIDES += \
     persist.radio.custom_ecc=1
@@ -395,10 +391,9 @@ endif
 # QCOM display HAL
 $(call project-set-path,qcom-display,device/lge/hammerheadcaf/display)
 
-$(call inherit-product-if-exists, hardware/broadcom/wlan/bcmdhd/firmware/bcm4339/device-bcm.mk)
-
 # setup dalvik vm configs.
 $(call inherit-product, frameworks/native/build/phone-xhdpi-2048-dalvik-heap.mk)
 
 $(call inherit-product-if-exists, hardware/qcom/msm8x74/msm8x74.mk)
 $(call inherit-product-if-exists, vendor/qcom/gpu/msm8x74/msm8x74-gpu-vendor.mk)
+$(call inherit-product-if-exists, hardware/broadcom/wlan/bcmdhd/firmware/bcm4339/device-bcm.mk)

@@ -26,8 +26,7 @@ TARGET_NO_BOOTLOADER := true
 BOARD_KERNEL_BASE := 0x00000000
 BOARD_KERNEL_PAGESIZE := 2048
 
-BOARD_KERNEL_CMDLINE := console=ttyHSL0,115200,n8 androidbootselinux=permissive
-androidboot.hardware=hammerhead user_debug=31 msm_watchdog_v2.enable=1 mdss_mdp.panel=dsi androidboot.bootdevice=msm_sdcc.1
+BOARD_KERNEL_CMDLINE := console=ttyHSL0,115200,n8 androidboot.hardware=hammerhead user_debug=31 msm_watchdog_v2.enable=1 mdss_mdp.panel=dsi androidboot.bootdevice=msm_sdcc.1
 BOARD_MKBOOTIMG_ARGS := --ramdisk_offset 0x02900000 --tags_offset 0x02700000
 BOARD_KERNEL_IMAGE_NAME := zImage-dtb
 
@@ -121,12 +120,43 @@ include device/qcom/sepolicy/sepolicy.mk
 BOARD_SEPOLICY_DIRS += \
     device/lge/hammerheadcaf/sepolicy
 
+BOARD_SEPOLICY_UNION += \
+    app.te \
+    bluetooth.te \
+    bluetooth_loader.te \
+    bridge.te \
+    file.te \
+    healthd.te \
+    hostapd.te \
+    mediaserver.te \
+    mm-qcamerad.te \
+    mpdecision.te \
+    netmgrd.te \
+    platform_app.te \
+    qmuxd.te \
+    qseecomd.te \
+    radio.te \
+    rild.te \
+    rmt_storage.te \
+    sensors.te \
+    subsystem_ramdump.te \
+    system_app.te \
+    system_server.te \
+    thermal-engine.te \
+    ueventd.te \
+    untrusted_app.te \
+    vold.te \
+    vss.te \
+    wpa.te \
+    file_contexts \
+    genfs_contexts
+
 HAVE_ADRENO_SOURCE:= false
 
 OVERRIDE_RS_DRIVER:= libRSDriver_adreno.so
 TARGET_FORCE_HWC_FOR_VIRTUAL_DISPLAYS := true
 
-# PowerHAL
+# Local QCOM PowerHAL
 TARGET_POWERHAL_VARIANT := hammerhead
 
 USE_DEVICE_SPECIFIC_QCOM_PROPRIETARY:= true
@@ -139,7 +169,6 @@ TARGET_HW_DISK_ENCRYPTION := true
 RECOVERY_FSTAB_VERSION := 2
 BOARD_HAS_NO_SELECT_BUTTON := true
 BOARD_USE_CUSTOM_RECOVERY_FONT := \"roboto_23x41.h\"
-BOARD_CANT_BUILD_RECOVERY_FROM_BOOT_PATCH := true
 
 # Hardware
 BOARD_HARDWARE_CLASS := device/lge/hammerheadcaf/cmhw

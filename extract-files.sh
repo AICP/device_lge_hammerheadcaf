@@ -91,7 +91,7 @@ for FILE in `cat proprietary-blobs.txt | grep -v ^# | grep -v ^$ | sed -e 's#^/s
         if [ -e $SRC/$FILE ]; then
             cp $SRC/$FILE $BASE/$FILE
         else
-            echo "ERROR: Pull file $SRC/$FILE from a device running CyanogenMod"
+            echo "ERROR: Pull file /system/$FILE from a device running CyanogenMod"
         fi
         if [ "${FILE##*.}" = "apk" ] || [ "${FILE##*.}" = "jar" ]; then
             oat2dex $SRC/$FILE
