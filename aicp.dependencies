@@ -1,6 +1,6 @@
 [
   {
-    "repository": "myfluxi/android_kernel_lge_hammerhead",
+    "repository": "CyanogenMod/android_kernel_lge_hammerhead",
     "target_path": "kernel/lge/hammerhead",
     "branch":      "cm-13.0-caf"
   },
