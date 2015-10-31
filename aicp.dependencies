@@ -8,5 +8,10 @@
     "repository": "AICP/proprietary_vendor_lge",
     "target_path": "vendor/lge",
     "branch":      "mm6.0"
+  },
+  {
+    "repository": "CyanogenMod/android_device_qcom_common",
+    "target_path": "device/qcom/common",
+    "branch":      "cm-13.0"
   }
 ]
