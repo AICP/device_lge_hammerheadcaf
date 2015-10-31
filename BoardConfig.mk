@@ -116,9 +116,12 @@ BOARD_HAL_STATIC_LIBRARIES := libdumpstate.hammerhead
 TARGET_KERNEL_CONFIG := cyanogenmod_hammerhead_defconfig
 TARGET_KERNEL_SOURCE := kernel/lge/hammerhead
 
+# SELinux policies
+# QCOM
+include device/qcom/sepolicy/sepolicy.mk
+
 # Board
-BOARD_SEPOLICY_DIRS += \
-    device/lge/hammerheadcaf/sepolicy
+BOARD_SEPOLICY_DIRS += device/lge/hammerheadcaf/sepolicy
 
 HAVE_ADRENO_SOURCE:= false
 
@@ -126,13 +129,13 @@ OVERRIDE_RS_DRIVER:= libRSDriver_adreno.so
 TARGET_FORCE_HWC_FOR_VIRTUAL_DISPLAYS := true
 
 # Local QCOM PowerHAL
-TARGET_POWERHAL_VARIANT := hammerhead
+#TARGET_POWERHAL_VARIANT := hammerhead
 
 USE_DEVICE_SPECIFIC_QCOM_PROPRIETARY:= true
 USE_DEVICE_SPECIFIC_CAMERA:= true
 
 # HW crypto
-# TARGET_HW_DISK_ENCRYPTION := true
+TARGET_HW_DISK_ENCRYPTION := true
 
 # Recovery
 RECOVERY_FSTAB_VERSION := 2
