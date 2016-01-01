@@ -1,7 +1,7 @@
 [
   {
     "repository": "CyanogenMod/android_kernel_lge_hammerhead",
-    "target_path": "kernel/lge/hammerhead",
+    "target_path": "kernel/lge/hammerheadcaf",
     "branch":      "cm-13.0-caf"
   },
   {
