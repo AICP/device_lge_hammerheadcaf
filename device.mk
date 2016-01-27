@@ -246,7 +246,7 @@ PRODUCT_PACKAGES += \
 
 # Doze mode
 PRODUCT_PACKAGES += \
-    HammerheadDoze
+    DeviceSettings
 
 # Recovery
 PRODUCT_PACKAGES += \
