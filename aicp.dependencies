@@ -2,11 +2,11 @@
   {
     "repository": "CyanogenMod/android_kernel_lge_hammerhead",
     "target_path": "kernel/lge/hammerheadcaf",
-    "branch":      "cm-13.0-caf"
+    "branch":      "cm-14.1-caf"
   },
   {
     "repository": "AICP/proprietary_vendor_lge",
     "target_path": "vendor/lge",
-    "branch":      "mm6.0"
+    "branch":      "n7.1"
   }
 ]
