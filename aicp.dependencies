@@ -15,11 +15,5 @@
 		"target_path":	"packages/resources/devicesettings",
 		"branch":	"cm-14.1",
 		"remote":	"github"
-	},
-	{
-		"repository":	"LineageOS/android_device_qcom_common",
-		"target_path":	"device/qcom/common",
-		"branch":	"cm-14.1",
-		"remote":	"github"
 	}
 ]
