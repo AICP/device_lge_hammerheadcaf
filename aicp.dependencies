@@ -1,6 +1,6 @@
 [
 	{
-		"repository":	"LineageOS/0android_kernel_lge_hammerhead",
+		"repository":	"LineageOS/android_kernel_lge_hammerhead",
 		"target_path":	"kernel/lge/hammerheadcaf",
 		"branch":	"cm-14.1-caf",
 		"remote":	"github"
